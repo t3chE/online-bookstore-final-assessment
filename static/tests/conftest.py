@@ -19,7 +19,7 @@ def cleanup_globals():
 
 
 @pytest.fixture
-def clean_books():
+def clean_books():\
     """Provides a fresh list of Book instances for tests."""
     return [
         app.Book("The Great Gatsby", "Fiction", 10.99, "img/gatsby.jpg"),
