@@ -50,7 +50,11 @@ class Cart:
 
     def update_quantity(self, book_title, quantity):
         if book_title in self.items:
-            self.items[book_title].quantity = quantity
+            # If quantity is zero or negative, remove the item from the cart
+            if quantity <= 0:
+                del self.items[book_title]
+            else:
+                self.items[book_title].quantity = quantity
 
     def get_total_price(self):
         total = 0
