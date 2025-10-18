@@ -74,41 +74,37 @@ If you want, I can:
 ---
 End of session notes.
 
----
-Additional updates (2025-10-17)
+Additional changes (2025-10-18)
 --------------------------------
-These entries document the CI and integration-scaffolding work performed after the initial test triage session. They are intended to make final documentation preparation easier for the assessor.
+- `app.py`
+  - Added a simple in-memory `INVENTORY` mapping (book title -> stock int) and helper functions `get_stock_for_title`, `reduce_stock_for_title`, and `increase_stock_for_title`.
+  - Why: Integration tests require deterministic inventory state and stock operations. The inventory mapping supports tests that verify stock is reserved or permanently reduced during checkout.
+  - Verification: Integration tests were added that assert inventory is decremented only on successful checkout and remains unchanged on payment failures.
 
-- Added CI workflow (.github/workflows/ci.yml)
-  - Why: Provide safe, automated unit-test execution on push and PRs to `main`.
-  - What: Runs `python -m pytest -q static/tests/unit` after installing `requirements.txt`.
-  - Verification: Workflow file committed and pushed to `main`. Unit tests pass locally (14 passed).
+Revert (2025-10-18)
+-------------------
+- `app.py` (reverted reservation-on-add changes)
+  - Reverted the temporary reservation behavior that reduced `INVENTORY` at add-to-cart time. Inventory is now only validated and deducted at successful checkout.
+  - Why: The project owner requested Option A (inventory changes at checkout only). Reverting ensures backward compatibility with the earlier design and avoids surprising side-effects during cart operations.
+  - Verification: Integration tests updated to expect inventory changes only at checkout.
 
-- Created feature branch `feature/integration-tests` and scaffolded integration tests
-  - Why: Integration tests are developed in a feature branch to avoid running heavier tests in the main CI pipeline until they are stable.
-  - What: Added `static/tests/integration/integration_tests.py` (skipped placeholders) and `static/tests/integration/README.md` plus an empty `fixtures/` directory.
-  - Verification: Branch pushed to remote; placeholders created so reviewers see the intended test matrix mapping from the deliverable.
+Search & CI additions (2025-10-18)
+----------------------------------
+- `app.py`
+  - Added a minimal `/search` JSON endpoint supporting query (`q`) and category filtering (`category`) to support integration tests for search and catalog behavior.
+  - Why: Integration tests require a small search API to validate catalog querying and filtering.
+  - Verification: Added integration tests that call `/search` and assert correct results.
 
-- Conftest fix and fixture safety
-  - Why: A stray character in `static/tests/conftest.py` caused a syntax/fixture-load issue. Also made the autouse fixture safer to avoid global reassignments.
-  - What: Removed stray backslash and implemented in-place backup/restore of `app.users` within the autouse fixture.
-  - Verification: All unit tests pass locally after the fix.
+- `.github/workflows/integration-ci.yml`
+  - New workflow to run integration tests on the `feature/integration-tests` branch only.
+  - Why: Integration tests are heavier and should not run on main CI; this workflow keeps integration runs isolated to the feature branch.
+  - Verification: Workflow created; will run on PRs to `feature/integration-tests`.
 
-- Unit test and models alignment
-  - Why: Unit tests were updated to match the `models.py` API (avoiding importing `app` which has side-effects). A small, reasonable behavior change was made to `models.Cart.update_quantity` so setting quantity to 0 removes the item (aligns with typical cart behavior and tests).
-  - What: Updated `static/tests/unit/*` to import from `models` and adjusted assertions. Updated `models.py` to remove zero-quantity items from the cart.
-  - Verification: All updated unit tests pass locally (14 passed).
-
-- Excel fixture policy (temporary)
-  - Why: The Excel file you provided was used as a temporary artifact to convey integration test scenarios and is not intended to be part of the permanent repo.
-  - What: Integration fixtures directory (`static/tests/integration/fixtures/`) is prepared. The actual Excel file should be dropped there temporarily for parsing/analysis, but will not be committed to `main`.
-  - Recommendation: Convert the Excel to JSON fixtures via a parser and commit the generated JSON fixtures (non-sensitive) to the `feature/integration-tests` branch; delete the original Excel file before merging to `main`.
-
-How to include these notes in final documentation
-----------------------------------------------
-- Copy the contents of this `CHANGES.md` into your final `RELEASES.md` or the Phase 4 Critical Evaluation Report. The entries above already explain the what/why/verification that assessors will want to see.
-
-If you want, I will now:
-- Add a small parser script (`tools/parse_excel_fixtures.py`) and update `requirements.txt` (pandas/openpyxl) so you can drop the Excel in `static/tests/integration/fixtures/` and auto-generate JSON fixtures.
-- Implement one concrete integration test in the feature branch that uses the generated JSON fixture and mocks Payment + Email to keep tests deterministic.
+Inventory refactor (2025-10-18)
+----------------------------------
+- `models.py` / `app.py`
+  - Moved the `INVENTORY` mapping and helper functions into `models.py` so inventory is part of the domain model.
+  - `app.py` initializes `models.INVENTORY` from `BOOKS` and exposes a local `INVENTORY` alias for backward compatibility with templates and tests.
+  - Why: Keeps domain data and operations together, simplifies future extension (e.g., persistence) and clarifies ownership of inventory logic.
+  - Verification: Integration tests executed after the change and passed.
 

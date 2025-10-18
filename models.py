@@ -172,3 +172,22 @@ class EmailService:
         print(f"==================\n")
         
         return True
+
+
+# Inventory: moved into models so domain logic lives with models
+# book title -> stock int
+INVENTORY = {}
+
+
+def get_stock_for_title(title):
+    return INVENTORY.get(title, 0)
+
+
+def reduce_stock_for_title(title, amount=1):
+    if title in INVENTORY:
+        INVENTORY[title] = max(0, INVENTORY[title] - amount)
+
+
+def increase_stock_for_title(title, amount=1):
+    if title in INVENTORY:
+        INVENTORY[title] += amount

@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from models import Book, Cart, User, Order, PaymentGateway, EmailService
+import models
 import uuid
 
 app = Flask(__name__)
@@ -24,6 +25,14 @@ BOOKS = [
     Book("Moby Dick", "Adventure", 12.49, "/images/books/moby_dick.jpg")
 ]
 
+# Initialize models.INVENTORY from BOOKS so domain inventory is centralized
+models.INVENTORY.clear()
+for book in BOOKS:
+    models.INVENTORY[book.title] = 5
+
+# Keep a local alias for backward compatibility with tests and templates
+INVENTORY = models.INVENTORY
+
 def get_book_by_title(title):
     """Helper function to find a book by title"""
     return next((book for book in BOOKS if book.title == title), None)
@@ -34,6 +43,22 @@ def get_current_user():
     if 'user_email' in session:
         return users.get(session['user_email'])
     return None
+
+
+@app.route('/search')
+def search():
+    """Simple search endpoint: ?q=keyword&category=CategoryName"""
+    q = (request.args.get('q') or '').strip().lower()
+    category = (request.args.get('category') or '').strip().lower()
+
+    results = []
+    for book in BOOKS:
+        matches_q = q in book.title.lower() if q else True
+        matches_cat = (book.category.lower() == category) if category else True
+        if matches_q and matches_cat:
+            results.append({'title': book.title, 'category': book.category, 'price': book.price})
+
+    return jsonify({'results': results})
 
 
 def login_required(f):
@@ -66,6 +91,7 @@ def add_to_cart():
             break
     
     if book:
+        # Add to cart (inventory is only checked/deducted at checkout)
         cart.add_book(book, quantity)
         flash(f'Added {quantity} "{book.title}" to cart!', 'success')
     else:
@@ -187,6 +213,13 @@ def process_checkout():
             flash('Please fill in all credit card details', 'error')
             return redirect(url_for('checkout'))
     
+    # Before charging, verify inventory availability for all items in the cart
+    for item in cart.get_items():
+        available = INVENTORY.get(item.book.title, 0)
+        if available < item.quantity:
+            flash(f'Not enough stock for "{item.book.title}". Available: {available}', 'error')
+            return redirect(url_for('checkout'))
+
     # Process payment through mock gateway
     payment_result = PaymentGateway.process_payment(payment_info)
     
@@ -220,7 +253,11 @@ def process_checkout():
     EmailService.send_order_confirmation(shipping_info['email'], order)
     
     # Clear cart
-    cart.clear()
+    # Deduct inventory permanently for purchased items
+    for item in order.items:
+        INVENTORY[item.book.title] = max(0, INVENTORY.get(item.book.title, 0) - item.quantity)
+
+    cart.items = {}
     
     # Store order in session for confirmation page
     session['last_order_id'] = order_id
